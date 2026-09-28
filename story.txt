@@ -1,6 +1,2 @@
 ﻿This is the beginning of my story.
-<<<<<<< HEAD
-Suddenly, a shot rang out!
-=======
-And the sun was shining brightly.
->>>>>>> test
+Suddenly, a shot rang out! But the sun was shining brightly.
