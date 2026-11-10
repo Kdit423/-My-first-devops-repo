@@ -42,15 +42,18 @@ jobs:
           sleep 15
           docker compose ps
 
-            - name: Deploy with Docker Compose
+                  - name: Deploy with Docker Compose
         run: |
-          docker compose down --remove-orphans || true
-          docker rm -f app-1 || true 
+          echo "Cleaning up old containers..."
+          # Останавливаем и удаляем контейнеры, если они остались от прошлых запусков
+          docker rm -f app app-db || true
+          
+          echo "Starting new containers..."
           docker compose up -d --build
+          
           echo "Waiting for services to start..."
           sleep 15
           docker compose ps
-
       - name: Run application tests
         # Критерий 4: Тесты приложения и БД (2 балла)
         run: |
