@@ -45,7 +45,7 @@ jobs:
             - name: Deploy with Docker Compose
         run: |
           docker compose down --remove-orphans || true
-          docker rm -f app-*** || true 
+          docker rm -f app-1 || true 
           docker compose up -d --build
           echo "Waiting for services to start..."
           sleep 15
