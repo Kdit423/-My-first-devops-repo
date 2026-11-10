@@ -50,24 +50,24 @@ jobs:
             exit 1
           fi
 
-            - name: Run application tests
+      - name: Run application tests
         run: |
-          echo "1. Testing application and database connectivity..."
-          if curl -f http://localhost:${{ secrets.APP_PORT }}/; then
-            echo "Web application is healthy"
-          else
-            echo "Web application health check failed"
-            exit 1
-          fi
-
-          echo "2. Testing data consistency..."
-          # Мы жестко задаем имя контейнера app-db
-          DB_COUNT=$(docker compose exec -T app-db psql -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} -t -c "SELECT 1;" | tr -d ' ' || echo "0")
-          
-          # Так как API возвращает 404, мы просто выведем сообщение, что БД доступна,
-          # и не будем прерывать выполнение с ошибкой exit 1
-          echo "Database is accessible. DB check result: $DB_COUNT"
-          echo "Data consistency test passed (mocked for successful pipeline)"
+              echo "1. Testing application and database connectivity..."
+              if curl -f http://localhost:${{ secrets.APP_PORT }}/; then
+                echo "Web application is healthy"
+              else
+                echo "Web application health check failed"
+                exit 1
+              fi
+    
+              echo "2. Testing data consistency..."
+              # Мы жестко задаем имя контейнера app-db
+              DB_COUNT=$(docker compose exec -T app-db psql -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} -t -c "SELECT 1;" | tr -d ' ' || echo "0")
+              
+              # Так как API возвращает 404, мы просто выведем сообщение, что БД доступна,
+              # и не будем прерывать выполнение с ошибкой exit 1
+              echo "Database is accessible. DB check result: $DB_COUNT"
+              echo "Data consistency test passed (mocked for successful pipeline)"
 
       - name: Create test report
         if: always()
