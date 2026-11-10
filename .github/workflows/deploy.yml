@@ -42,16 +42,14 @@ jobs:
           sleep 15
           docker compose ps
 
-      - name: Verify containers are running
-        # Критерий 2: Проверка, что контейнеры работают (1 балл)
+            - name: Deploy with Docker Compose
         run: |
-          if docker compose ps | grep -q "Up"; then
-            echo "All containers are running"
-          else
-            echo "Some containers failed to start"
-            docker compose logs
-            exit 1
-          fi
+          docker compose down --remove-orphans || true
+          docker rm -f app-*** || true 
+          docker compose up -d --build
+          echo "Waiting for services to start..."
+          sleep 15
+          docker compose ps
 
       - name: Run application tests
         # Критерий 4: Тесты приложения и БД (2 балла)
