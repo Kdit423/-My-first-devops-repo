@@ -1,4 +1,3 @@
-
 name: Full Stack Application Deployment Test
 
 on:
@@ -11,15 +10,13 @@ env:
 
 jobs:
   deploy-and-test:
-    # Критерий 1: Используем наш Mac как runner (3 балла)
-    runs-on: self-hosted 
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Create .env file from secrets
-        # Критерий 3: Генерируем .env из секретов (1 балл)
         run: |
           cat > .env << EOF
           DB_HOST=${{ secrets.DB_HOST }}
@@ -35,33 +32,27 @@ jobs:
           echo ".env created successfully"
 
       - name: Deploy with Docker Compose
-        # Критерий 2: Запуск докера (1 балл)
         run: |
-          docker compose down || true
+          echo "Cleaning up old containers..."
           docker rm -f app app-db || true
           docker compose up -d --build
           echo "Waiting for services to start..."
           sleep 15
           docker compose ps
 
-                  - name: Deploy with Docker Compose
+      - name: Verify containers are running
         run: |
-          echo "Cleaning up old containers..."
-          # Останавливаем и удаляем контейнеры, если они остались от прошлых запусков
-          docker rm -f app app-db || true
-          
-          echo "Starting new containers..."
-          docker compose up -d --build
-          
-          echo "Waiting for services to start..."
-          sleep 15
-          docker compose ps
+          if docker compose ps | grep -q "Up"; then
+            echo "All containers are running"
+          else
+            echo "Some containers failed to start"
+            docker compose logs
+            exit 1
+          fi
+
       - name: Run application tests
-        # Критерий 4: Тесты приложения и БД (2 балла)
         run: |
           echo "1. Testing application and database connectivity..."
-          # ВАЖНО: замените порт и эндпоинт /health на те, что есть в вашем бэкенде!
-          # Если бэкенд работает на 8080, напишите http://localhost:8080/health
           if curl -f http://localhost:${{ secrets.APP_PORT }}/health; then
             echo "Web application is healthy"
           else
@@ -70,10 +61,7 @@ jobs:
           fi
 
           echo "2. Testing data consistency..."
-          # ВАЖНО: Эта часть может не сработать, если у вас нет БД в докере.
-          # Если БД есть, убедитесь, что имя сервиса в docker-compose.yml совпадает (например, 'db')
-          # Если нет, просто закомментируйте эту часть.
-          DB_COUNT=$(docker compose exec -T db psql -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} -t -c "SELECT COUNT(*) FROM items;" | tr -d ' ' || echo "0")
+          DB_COUNT=$(docker compose exec -T app-db psql -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} -t -c "SELECT COUNT(*) FROM items;" | tr -d ' ' || echo "0")
           WEB_COUNT=$(curl -s http://localhost:${{ secrets.APP_PORT }}/api/items/count || echo "0")
           echo "DB Count: $DB_COUNT, Web API Count: $WEB_COUNT"
           if [ "$DB_COUNT" = "$WEB_COUNT" ]; then
@@ -100,7 +88,6 @@ jobs:
           docker images > docker-images.txt || true
 
       - name: Upload artifacts
-        # Критерий 3: Сохранение артефактов (2 балла)
         if: always()
         uses: actions/upload-artifact@v4
         with:
