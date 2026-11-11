@@ -37,9 +37,12 @@ services:
 
 networks:
   mattermost_network:
-    driver: bridge
+    name: mattermost_network # ЖЕСТКОЕ ИМЯ СЕТИ
 
 volumes:
   mattermost_data:
+    name: mattermost_data   # ЖЕСТКОЕ ИМЯ ТОМА
   mattermost_logs:
+    name: mattermost_logs
   mysql_data:
+    name: mysql_data

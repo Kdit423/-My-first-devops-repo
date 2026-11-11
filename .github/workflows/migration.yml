@@ -15,75 +15,59 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Проверка идемпотентности (флаг-файл)
+      # 1. Проверка идемпотентности
       - name: Check Migration Status
         id: check_status
         run: |
           if [ -f "$HOME/.mattermost_migration_completed" ]; then
-            echo "Database already migrated to PostgreSQL. Skipping data transfer."
             echo "already_migrated=true" >> $GITHUB_OUTPUT
           else
-            echo "Migration required."
             echo "already_migrated=false" >> $GITHUB_OUTPUT
           fi
 
-      # 2. Бэкап MySQL (ДО очистки!)
+      # 2. Бэкап
       - name: Backup Legacy MySQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
-          echo "Creating timestamped backup of MySQL..."
           BACKUP_NAME="mattermost_mysql_backup_${{ github.run_id }}.sql"
-          if docker ps | grep -q "mattermost-mysql"; then
-            docker exec mattermost-mysql mysqldump -u root -p${{ secrets.DB_MYSQL_ROOT_PASSWORD }} mattermost > $BACKUP_NAME
-            echo "Backup successfully saved as $BACKUP_NAME"
-          else
-            echo "Error: Legacy MySQL container is not running!"
-            exit 1
-          fi
+          docker exec mattermost-mysql mysqldump -u root -p${{ secrets.DB_MYSQL_ROOT_PASSWORD }} mattermost > $BACKUP_NAME
+          echo "Backup saved as $BACKUP_NAME"
 
-      # 3. Запуск целевого PostgreSQL
+      # 3. Запуск Postgres
       - name: Start Target PostgreSQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
-          docker network create mattermost_network || true
-          docker compose -p mmproject -f $COMPOSE_FILE up -d mattermost-postgres
-          echo "Waiting for PostgreSQL to initialize..."
+          docker compose -f $COMPOSE_FILE up -d mattermost-postgres
           sleep 10
 
-      # 4. Гетерогенная миграция данных
-      - name: Run pgloader (with Schema Drop for Idempotency)
+      # 4. Миграция (Исправлены имена хостов!)
+      - name: Run pgloader
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
-          echo "Migrating schema and data from MySQL to PostgreSQL..."
           docker run --rm --platform linux/amd64 --network=mattermost_network \
             mattermost/mattermost-pgloader:latest pgloader \
             --with "include drop" \
             mysql://root:${{ secrets.DB_MYSQL_ROOT_PASSWORD }}@mattermost-mysql/mattermost \
-            postgresql://mmuser:${{ secrets.DB_POSTGRES_PASSWORD }}@mmproject-mattermost-postgres-1/mattermost
+            postgresql://mmuser:${{ secrets.DB_POSTGRES_PASSWORD }}@mattermost-postgres/mattermost
 
-      # 5. Установка маркерного флаг-файла
+      # 5. Флаг-файл
       - name: Mark Migration as Completed
         if: steps.check_status.outputs.already_migrated == 'false'
         run: touch $HOME/.mattermost_migration_completed
 
-      # 6. Очистка старого MySQL и запуск нового стека
-      - name: Cleanup Legacy and Deploy Upgraded Stack
+      # 6. Деплой
+      - name: Deploy Upgraded Stack
         run: |
-          echo "Removing legacy MySQL container to free up resources..."
           docker rm -f mattermost-mysql || true
-          
-          echo "Launching Upgraded Mattermost Stack..."
-          docker compose -p mmproject -f $COMPOSE_FILE up -d --build --remove-orphans
+          docker compose -f $COMPOSE_FILE up -d --remove-orphans
 
-      # 7. Тестирование
-      - name: Run Health Checks & Verify Data
+      # 7. Проверка
+      - name: Run Health Checks
         run: |
-          echo "Running Smoke Tests..."
           sleep 10
           if curl -f http://localhost:8065/api/v4/system/ping; then
-            echo "Mattermost upgraded successfully and running on Postgres!"
+            echo "Success!"
           else
-            echo "Application health check failed. Fetching logs..."
-            docker compose -p mmproject -f $COMPOSE_FILE logs
+            docker compose -f $COMPOSE_FILE logs
             exit 1
           fi
