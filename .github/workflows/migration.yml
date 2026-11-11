@@ -55,7 +55,7 @@ jobs:
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
           echo "Migrating schema and data from MySQL to PostgreSQL..."
-          docker run --rm --network=mattermost_network \
+          docker run --rm --platform linux/amd64 --network=mattermost_network \
             mattermost/mattermost-pgloader:latest pgloader \
             --with "include drop" \
             mysql://root:${{ secrets.DB_MYSQL_ROOT_PASSWORD }}@mattermost-mysql/mattermost \
