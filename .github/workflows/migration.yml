@@ -41,12 +41,15 @@ jobs:
             exit 1
           fi
 
-      # 3. Запуск целевого PostgreSQL и создание сети
+      # 3. Запуск целевого PostgreSQL и настройка сети
       - name: Start Target PostgreSQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
           docker network create mattermost_network || true
-          docker compose -f $COMPOSE_FILE up -d mattermost-postgres
+          # Запускаем Postgres с жестким именем проекта
+          docker compose -p mmproject -f $COMPOSE_FILE up -d mattermost-postgres
+          # Принудительно подключаем контейнер postgres к нашей сети
+          docker network connect mattermost_network mmproject-mattermost-postgres-1 || true
           echo "Waiting for PostgreSQL to initialize..."
           sleep 10
 
@@ -59,18 +62,18 @@ jobs:
             mattermost/mattermost-pgloader:latest pgloader \
             --with "include drop" \
             mysql://root:${{ secrets.DB_MYSQL_ROOT_PASSWORD }}@mattermost-mysql/mattermost \
-            postgresql://mmuser:${{ secrets.DB_POSTGRES_PASSWORD }}@mattermost-postgres/mattermost
+            postgresql://mmuser:${{ secrets.DB_POSTGRES_PASSWORD }}@mmproject-mattermost-postgres-1/mattermost
 
       # 5. Установка маркерного флаг-файла
       - name: Mark Migration as Completed
         if: steps.check_status.outputs.already_migrated == 'false'
         run: touch $HOME/.mattermost_migration_completed
 
-      # 6. Развертывание обновленного стека (удаление старого MySQL)
+      # 6. Развертывание обновленного стека
       - name: Deploy Upgraded Stack
         run: |
           echo "Launching Upgraded Mattermost Stack..."
-          docker compose -f $COMPOSE_FILE up -d --build --remove-orphans
+          docker compose -p mmproject -f $COMPOSE_FILE up -d --build --remove-orphans
 
       # 7. Тестирование и проверка сохранности данных
       - name: Run Health Checks & Verify Data
@@ -81,6 +84,6 @@ jobs:
             echo "Mattermost upgraded successfully and running on Postgres!"
           else
             echo "Application health check failed. Fetching logs..."
-            docker compose -f $COMPOSE_FILE logs
+            docker compose -p mmproject -f $COMPOSE_FILE logs
             exit 1
           fi
