@@ -58,7 +58,7 @@ jobs:
       # 6. Деплой
       - name: Deploy Upgraded Stack
         run: |
-          docker rm -f mattermost-mysql || true
+          docker rm -f mattermost mattermost-mysql || true
           docker compose -f $COMPOSE_FILE up -d --remove-orphans
 
       # 7. Проверка
