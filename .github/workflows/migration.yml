@@ -19,7 +19,6 @@ jobs:
       - name: Check Migration Status
         id: check_status
         run: |
-          # Флаг-файл хранится в домашней директории пользователя на Mac
           if [ -f "$HOME/.mattermost_migration_completed" ]; then
             echo "Database already migrated to PostgreSQL. Skipping data transfer."
             echo "already_migrated=true" >> $GITHUB_OUTPUT
@@ -42,10 +41,11 @@ jobs:
             exit 1
           fi
 
-      # 3. Запуск целевого PostgreSQL
+      # 3. Запуск целевого PostgreSQL и создание сети
       - name: Start Target PostgreSQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
+          docker network create mattermost_network || true
           docker compose -f $COMPOSE_FILE up -d mattermost-postgres
           echo "Waiting for PostgreSQL to initialize..."
           sleep 10
