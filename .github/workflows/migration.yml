@@ -15,11 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 0. Очистка старых контейнеров, чтобы избежать конфликта имен
-      - name: Cleanup existing containers
-        run: |
-          docker rm -f mattermost mattermost-postgres mattermost-mysql || true
-
       # 1. Проверка идемпотентности (флаг-файл)
       - name: Check Migration Status
         id: check_status
@@ -32,7 +27,7 @@ jobs:
             echo "already_migrated=false" >> $GITHUB_OUTPUT
           fi
 
-      # 2. Создание бэкапа MySQL
+      # 2. Бэкап MySQL (ДО очистки!)
       - name: Backup Legacy MySQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
@@ -60,7 +55,6 @@ jobs:
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
           echo "Migrating schema and data from MySQL to PostgreSQL..."
-          # Имя контейнера теперь генерируется автоматически (mmproject-mattermost-postgres-1)
           docker run --rm --platform linux/amd64 --network=mattermost_network \
             mattermost/mattermost-pgloader:latest pgloader \
             --with "include drop" \
@@ -72,9 +66,12 @@ jobs:
         if: steps.check_status.outputs.already_migrated == 'false'
         run: touch $HOME/.mattermost_migration_completed
 
-      # 6. Развертывание обновленного стека
-      - name: Deploy Upgraded Stack
+      # 6. Очистка старого MySQL и запуск нового стека
+      - name: Cleanup Legacy and Deploy Upgraded Stack
         run: |
+          echo "Removing legacy MySQL container to free up resources..."
+          docker rm -f mattermost-mysql || true
+          
           echo "Launching Upgraded Mattermost Stack..."
           docker compose -p mmproject -f $COMPOSE_FILE up -d --build --remove-orphans
 
