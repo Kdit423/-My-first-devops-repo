@@ -15,11 +15,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Проверка идемпотентности
+      # 1. Проверка идемпотентности (флаг-файл)
       - name: Check Migration Status
         id: check_status
         run: |
-          # Флаг-файл будем хранить в домашней директории пользователя на Mac
+          # Флаг-файл хранится в домашней директории пользователя на Mac
           if [ -f "$HOME/.mattermost_migration_completed" ]; then
             echo "Database already migrated to PostgreSQL. Skipping data transfer."
             echo "already_migrated=true" >> $GITHUB_OUTPUT
@@ -28,7 +28,7 @@ jobs:
             echo "already_migrated=false" >> $GITHUB_OUTPUT
           fi
 
-      # 2. Бэкап MySQL
+      # 2. Создание бэкапа MySQL
       - name: Backup Legacy MySQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
@@ -42,7 +42,7 @@ jobs:
             exit 1
           fi
 
-      # 3. Запуск PostgreSQL
+      # 3. Запуск целевого PostgreSQL
       - name: Start Target PostgreSQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
@@ -50,7 +50,7 @@ jobs:
           echo "Waiting for PostgreSQL to initialize..."
           sleep 10
 
-      # 4. Миграция данных
+      # 4. Гетерогенная миграция данных (с флагом для Mac M1/M2/M3)
       - name: Run pgloader (with Schema Drop for Idempotency)
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
@@ -61,22 +61,22 @@ jobs:
             mysql://root:${{ secrets.DB_MYSQL_ROOT_PASSWORD }}@mattermost-mysql/mattermost \
             postgresql://mmuser:${{ secrets.DB_POSTGRES_PASSWORD }}@mattermost-postgres/mattermost
 
-      # 5. Установка флага успешной миграции
+      # 5. Установка маркерного флаг-файла
       - name: Mark Migration as Completed
         if: steps.check_status.outputs.already_migrated == 'false'
         run: touch $HOME/.mattermost_migration_completed
 
-      # 6. Развертывание нового стека
+      # 6. Развертывание обновленного стека (удаление старого MySQL)
       - name: Deploy Upgraded Stack
         run: |
           echo "Launching Upgraded Mattermost Stack..."
-          docker compose -f $COMPOSE_FILE up -d --remove-orphans
+          docker compose -f $COMPOSE_FILE up -d --build --remove-orphans
 
-      # 7. Проверка работоспособности
+      # 7. Тестирование и проверка сохранности данных
       - name: Run Health Checks & Verify Data
         run: |
           echo "Running Smoke Tests..."
-          sleep 10 # Даем новому Mattermost время запуститься
+          sleep 10
           if curl -f http://localhost:8065/api/v4/system/ping; then
             echo "Mattermost upgraded successfully and running on Postgres!"
           else
