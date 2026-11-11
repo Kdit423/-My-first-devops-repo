@@ -15,6 +15,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 0. Очистка старых контейнеров, чтобы избежать конфликта имен
+      - name: Cleanup existing containers
+        run: |
+          docker rm -f mattermost mattermost-postgres mattermost-mysql || true
+
       # 1. Проверка идемпотентности (флаг-файл)
       - name: Check Migration Status
         id: check_status
@@ -41,23 +46,21 @@ jobs:
             exit 1
           fi
 
-      # 3. Запуск целевого PostgreSQL и настройка сети
+      # 3. Запуск целевого PostgreSQL
       - name: Start Target PostgreSQL
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
           docker network create mattermost_network || true
-          # Запускаем Postgres с жестким именем проекта
           docker compose -p mmproject -f $COMPOSE_FILE up -d mattermost-postgres
-          # Принудительно подключаем контейнер postgres к нашей сети
-          docker network connect mattermost_network mmproject-mattermost-postgres-1 || true
           echo "Waiting for PostgreSQL to initialize..."
           sleep 10
 
-      # 4. Гетерогенная миграция данных (с флагом для Mac M1/M2/M3)
+      # 4. Гетерогенная миграция данных
       - name: Run pgloader (with Schema Drop for Idempotency)
         if: steps.check_status.outputs.already_migrated == 'false'
         run: |
           echo "Migrating schema and data from MySQL to PostgreSQL..."
+          # Имя контейнера теперь генерируется автоматически (mmproject-mattermost-postgres-1)
           docker run --rm --platform linux/amd64 --network=mattermost_network \
             mattermost/mattermost-pgloader:latest pgloader \
             --with "include drop" \
@@ -75,7 +78,7 @@ jobs:
           echo "Launching Upgraded Mattermost Stack..."
           docker compose -p mmproject -f $COMPOSE_FILE up -d --build --remove-orphans
 
-      # 7. Тестирование и проверка сохранности данных
+      # 7. Тестирование
       - name: Run Health Checks & Verify Data
         run: |
           echo "Running Smoke Tests..."
